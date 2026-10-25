@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stellantis Activities Summary — Live Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+:root {
+  --bg:#f0f4f9;--surface:#fff;--border:rgba(0,0,0,0.08);
+  --blue:#1e6fbf;--blue2:#2b9de8;--green:#0f8a52;--green2:#0f6e3d;
+  --red:#d03535;--amber:#d08a00;--gray-bar:#dce3ed;
+  --text:#0f1b2e;--text2:#4a5a72;--text3:#8a9ab5;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;font-size:14px}
+header{background:linear-gradient(135deg,#1a3a6e 0%,#1e6fbf 50%,#1a3a6e 100%);padding:1.4rem 2.5rem}
+.header-inner{max-width:1400px;margin:0 auto;display:flex;align-items:center;gap:16px}
+.header-title h1{font-size:22px;font-weight:700;color:#fff}
+.header-title p{font-size:12px;color:#000;margin-top:2px}
+main{max-width:1400px;margin:0 auto;padding:1.5rem 2.5rem}
+
+.filter-bar{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem 1.5rem;margin-bottom:1.5rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.filter-bar label{font-size:12px;color:var(--text2);font-weight:500}
+.filter-bar input[type=date]{border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--text);background:#f8fafc;cursor:pointer;font-family:inherit}
+.filter-bar input:focus{outline:none;border-color:var(--blue)}
+.btn-apply{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:7px 18px;font-size:12px;font-weight:600;cursor:pointer;transition:background 0.2s;font-family:inherit}
+.btn-apply:hover{background:#1a5fa8}
+.btn-apply.gray{background:#4a5a72}.btn-apply.gray:hover{background:#3b495d}
+.btn-apply:disabled{opacity:.6;cursor:wait}
+.btn-apply:focus-visible,.link-btn:focus-visible,.rc-card:focus-visible{outline:2px solid #0f1b2e;outline-offset:2px}
+.loading-bar{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text3)}
+.spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.last-updated{font-size:11px;color:var(--text3);margin-left:auto}
+
+.section-label{font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.section-label::after{content:'';flex:1;height:1px;background:var(--border)}
+
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr));gap:12px;margin-bottom:2rem}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem 1.2rem;position:relative;overflow:hidden;transition:transform 0.15s,box-shadow 0.15s}
+.kpi:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,0.08)}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:12px 12px 0 0;background:var(--blue2)}
+.kpi.green::before{background:var(--green)}.kpi.red::before{background:var(--red)}.kpi.gold::before{background:var(--amber)}
+.kpi.click{cursor:pointer}
+.kpi-label{font-size:11px;color:var(--text2);margin-bottom:5px;font-weight:500}
+.kpi-value{font-size:26px;font-weight:700;color:var(--text);line-height:1;font-family:'Barlow Condensed',sans-serif}
+.kpi-sub{font-size:11px;color:var(--text3);margin-top:4px}
+.kpi-change{font-size:11px;font-weight:600;margin-top:3px}
+.kpi-change.pos{color:var(--green)}.kpi-change.neg{color:var(--red)}.kpi-change.warn{color:var(--amber)}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.25rem 1.5rem;min-width:0}
+.card-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:3px;font-family:'Barlow Condensed',sans-serif;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.card-sub{font-size:12px;color:var(--text3);margin-bottom:1.1rem}
+.card.recall-card{border:1.5px solid rgba(30,111,191,0.35);box-shadow:0 0 0 4px rgba(30,111,191,0.06)}
+.link-btn{background:rgba(30,111,191,0.1);color:var(--blue);border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif;white-space:nowrap}
+.link-btn:hover{background:rgba(30,111,191,0.18)}
+
+.funnel-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.funnel-row-label{font-size:12px;color:var(--text2);width:90px;text-align:right;flex-shrink:0}
+.funnel-bar{height:32px;border-radius:6px;display:flex;align-items:center;padding:0 10px;font-size:13px;font-weight:600;color:#fff;min-width:48px;transition:width 0.6s ease;white-space:nowrap}
+.funnel-pct{font-size:10px;opacity:0.85;margin-left:6px}
+
+.bar-section-title{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin:1rem 0 8px}
+.bar-item{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.bar-item-label{font-size:11px;color:var(--text2);width:150px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar-item-track{flex:1;height:8px;background:var(--gray-bar);border-radius:4px;overflow:hidden}
+.bar-item-fill{height:100%;border-radius:4px;transition:width 0.6s ease}
+.bar-item-val{font-size:11px;font-weight:600;color:var(--text);width:36px;text-align:right;flex-shrink:0;font-variant-numeric:tabular-nums}
+
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:2rem}
+@media (max-width:1000px){.grid-3{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr));gap:16px;margin-bottom:2rem}
+.grid-4{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+
+.donut-wrap{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.donut-pos{position:relative}
+.donut-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
+.donut-center .pct{font-size:20px;font-weight:700;color:var(--text);font-family:'Barlow Condensed',sans-serif}
+.donut-center .lbl{font-size:10px;color:var(--text3)}
+.donut-legend-item{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)}
+.donut-legend-item:last-child{border-bottom:none}
+.donut-legend-item .name{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)}
+.donut-legend-item .val{font-size:13px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
+.dot{width:8px;height:8px;border-radius:2px;flex-shrink:0;display:inline-block}
+.pill{display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px}
+.pill.green{background:rgba(15,138,82,0.12);color:#0f6e3d}.pill.red{background:rgba(208,53,53,0.1);color:#c02020}
+.pill.amber{background:rgba(208,138,0,0.12);color:#9a6600}.pill.gray{background:rgba(74,90,114,0.1);color:#4a5a72}
+
+/* RECALL AREA */
+.recall-area{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.25rem 1.5rem;margin-bottom:2rem}
+.table-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--border)}
+.rc-table{width:100%;border-collapse:collapse;font-size:12px;min-width:860px}
+.rc-table th{background:#1e6fbf;color:#fff;padding:9px 10px;text-align:center;font-weight:600;font-size:11px;white-space:nowrap}
+.rc-table th:first-child{text-align:left}
+.rc-table td{padding:8px 10px;text-align:center;border-bottom:1px solid var(--border);color:var(--text2);font-variant-numeric:tabular-nums}
+.rc-table td:first-child{text-align:left;font-weight:600;color:var(--text)}
+.rc-table tbody.rows tr{cursor:pointer}
+.rc-table tbody.rows tr:hover td{background:#f0f4f9}
+.rc-table tbody.rows tr.active td{background:#e6f0fb}
+.rc-table tbody.rows tr.empty td{color:var(--text3);cursor:default}
+.rc-table .total td{background:#f0f6ff;font-weight:700;color:#1e6fbf;border-top:2px solid #1e6fbf}
+.stack{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--gray-bar);min-width:130px}
+.stack span{display:block;height:100%}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--text2)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:1.25rem 0 1rem}
+.tab{border:1px solid var(--border);background:#f6f8fb;color:var(--text2);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.tab:hover{background:#eaf1f9}
+.tab.active{background:var(--blue);border-color:var(--blue);color:#fff}
+.tab.empty{opacity:.55}
+.detail{border-top:1px solid var(--border);padding-top:1.25rem}
+.detail-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:1rem}
+.detail-code{font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;line-height:1}
+.detail-sub{font-size:12px;color:var(--text3);margin-top:4px}
+.mini-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:1.25rem}
+.mini-kpis div{background:#f6f8fb;border-radius:10px;padding:10px 12px}
+.mini-kpis b{display:block;font-family:'Barlow Condensed',sans-serif;font-size:22px;color:var(--text);font-variant-numeric:tabular-nums;line-height:1.1}
+.mini-kpis small{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px}
+.detail .grid-3{margin-bottom:0}
+.detail .card{border-color:rgba(0,0,0,0.06)}
+
+.ag-table{width:100%;border-collapse:collapse;font-size:12px}
+.ag-table th{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);font-weight:600;text-align:right;padding:6px 8px;border-bottom:1px solid var(--border)}
+.ag-table th:first-child,.ag-table td:first-child{text-align:left}
+.ag-table td{padding:7px 8px;border-bottom:1px solid var(--border);text-align:right;color:var(--text2);font-variant-numeric:tabular-nums}
+.ag-table td:first-child{color:var(--text);font-weight:500}
+
+.notice{background:#fff8e6;border:1px solid rgba(208,138,0,0.3);color:#7a5200;border-radius:10px;padding:10px 14px;font-size:12px;margin-bottom:1.5rem}
+
+footer{text-align:center;padding:1.5rem;color:#ffffff;font-size:13px;font-weight:600;background:linear-gradient(135deg,#1a3a6e 0%,#1e6fbf 50%,#1a3a6e 100%);letter-spacing:0.5px;margin-top:0.5rem}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.kpi{animation:fadeUp 0.4s ease both}
+@media (prefers-reduced-motion: reduce){.kpi{animation:none}.funnel-bar,.bar-item-fill{transition:none}}
+@media (max-width:640px){
+  header{padding:1rem 16px} main{padding:1rem 16px}
+  .grid-2,.grid-3,.grid-4{grid-template-columns:1fr}
+  .last-updated{margin-left:0}
+  footer{flex-direction:column;gap:6px;padding:1rem 16px!important}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <img src="data:image/avif;base64,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" alt="Petromin" style="height:80px;width:auto;border-radius:8px;">
+    <div class="header-title">
+      <h1>Stellantis Activities Summary</h1>
+      <p>Executive Performance Dashboard</p>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <div class="filter-bar">
+    <label for="dateFrom">From</label>
+    <input type="date" id="dateFrom">
+    <label for="dateTo">To</label>
+    <input type="date" id="dateTo">
+    <button class="btn-apply" onclick="render()">Apply</button>
+    <button class="btn-apply gray" onclick="loadAll()">🔄 Refresh</button>
+    <div class="loading-bar" id="loadingBar" style="display:none"><div class="spinner"></div> Loading data...</div>
+    <div class="last-updated" id="lastUpdated"></div>
+  </div>
+
+  <div class="notice" id="notice" style="display:none"></div>
+
+  <!-- KPIs -->
+  <div class="section-label">Key Performance Indicators</div>
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <!-- FUNNELS -->
+  <div class="section-label">Conversion Funnels</div>
+  <div class="grid-3" id="funnels"></div>
+
+  <!-- RECALLS -->
+  <div class="section-label" id="recalls">Recall Campaigns</div>
+  <div class="recall-area">
+    <div class="card-title" style="font-size:17px">All Recalls — Combined</div>
+    <div class="card-sub" id="recallSub">—</div>
+    <div class="table-wrap"><div id="recallTable"></div></div>
+    <div class="legend">
+      <span><span class="dot" style="background:#0f8a52"></span> Booked</span>
+      <span><span class="dot" style="background:#d03535"></span> Not booked</span>
+      <span><span class="dot" style="background:#d08a00"></span> No answer</span>
+      <span><span class="dot" style="background:#8a9ab5"></span> Closed / wrong no.</span>
+      <span><span class="dot" style="background:#dce3ed"></span> Not called yet</span>
+    </div>
+    <div class="tabs" id="recallTabs" role="tablist" aria-label="Recalls"></div>
+    <div class="detail" id="recallDetail"></div>
+  </div>
+
+  <!-- BOOKINGS ACROSS ACTIVITIES -->
+  <div class="section-label">Bookings Across All Activities</div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">All Bookings</div>
+      <div class="card-sub">All activities combined · booked ÷ answered</div>
+      <div class="donut-wrap">
+        <div class="donut-pos" style="width:160px;height:160px;flex-shrink:0;">
+          <canvas id="allDonut" aria-label="Booked vs not booked"></canvas>
+          <div class="donut-center"><div class="pct" id="allRate">—</div><div class="lbl">booking rate</div></div>
+        </div>
+        <div style="flex:1;min-width:170px">
+          <div class="donut-legend-item"><div class="name"><span class="dot" style="background:#0f8a52"></span>Booked</div><div class="val" id="allBooked">—</div></div>
+          <div class="donut-legend-item"><div class="name"><span class="dot" style="background:#d03535"></span>Not Booked</div><div class="val" id="allNotBooked">—</div></div>
+          <div class="donut-legend-item"><div class="name"><span class="dot" style="background:#d08a00"></span>No Answer</div><div class="val" id="allNoAns">—</div></div>
+        </div>
+      </div>
+      <div class="bar-section-title" style="margin-top:1rem;">Booked per Activity</div>
+      <div id="bookedPerActivity"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Booking Rate by Activity</div>
+      <div class="card-sub">Booked ÷ answered</div>
+      <div style="position:relative;height:320px"><canvas id="rateChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- BRANCH + AGENT -->
+  <div class="section-label">Branches & Agents — All Activities</div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Bookings by Branch</div>
+      <div class="card-sub" id="branchSub">—</div>
+      <div id="branches"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Agent Performance</div>
+      <div class="card-sub">Calls handled, answered and booked per agent</div>
+      <div style="overflow-x:auto"><div id="agents"></div></div>
+    </div>
+  </div>
+
+</main>
+
+<footer style="display:flex;align-items:center;justify-content:space-between;padding:1.25rem 2.5rem;">
+  <span>Stellantis &nbsp;·&nbsp; Petromin Service Network &nbsp;·&nbsp; Executive Dashboard &nbsp;·&nbsp; Live Data from Google Sheets</span>
+  <span style="font-weight:600;letter-spacing:0.5px;">Created by Team Leader : Abeer Aljehani</span>
+</footer>
+
+<script>
+/* ================== CONFIG ================== */
+const SHEET_ID = '1NlOtQN-8z5fveJGQVy2HxJSk-XqiEOrORM6d6GF54AE';
+// Every tab of "Stellantis Activities". sheet = exact tab name.
+// If a tab shows "no data" but has data: open it in Google Sheets, copy the number after "gid=" in the address bar into gid.
+const ACTIVITIES = [
+  { key:'web',  label:'Website Mopar',          sheet:'Website Mopar',                 gid:'', unit:'Leads' },
+  { key:'km1',  label:'1km Service',            sheet:'1km Service',                   gid:'', unit:'Calls' },
+  { key:'pms',  label:'PMS Reminder',           unit:'Calls',   // two tabs combined into one activity
+    sources:[ { sheet:'PMS Reminder 14 days', gid:'' }, { sheet:'Expected VIN List PMS Reminder', gid:'' } ] },
+  { key:'lost', label:'Lost Customer',          sheet:'Lost Customer',                 gid:'', unit:'Calls' },
+];
+const RECALLS = [
+  { code:'78D',    sheet:'Recall 78D',    gid:'' },
+  { code:'54D',    sheet:'Recall 54D',    gid:'' },
+  { code:'62D',    sheet:'Recall 62D',    gid:'' },
+  { code:'77C',    sheet:'Recall 77C',    gid:'' },
+  { code:'35D',    sheet:'Recall 35D',    gid:'' },
+  { code:'94B',    sheet:'Recall 94B',    gid:'' },
+  { code:'Takata', sheet:'Takata Recall', gid:'' },
+  { code:'30B',    sheet:'Recall 30B',    gid:'' },
+  { code:'90C',    sheet:'Recall 90C',    gid:'' },
+  { code:'B4C',    sheet:'B4C Recall',    gid:'' },
+  { code:'20C',    sheet:'Recall 20C',    gid:'' },
+  { code:'19B',    sheet:'Recall 19B',    gid:'' },
+  { code:'16C',    sheet:'Recall 16C',    gid:'' },
+  { code:'C3C',    sheet:'Recall C3C',    gid:'' },
+  { code:'80C',    sheet:'Recall 80C',    gid:'' },
+  { code:'83D',    sheet:'Recall 83D',    gid:'' },
+];
+
+/* ================== CORE LOGIC (shared with the PowerPoint export) ================== */
+const BRANCHES=['khurais','automall','dammam','khobar','madinah road','nakheel','nakeel','makkah','jubail','hail','tabuk','madinah','jeddah','riyadh','qassim','abha','taif','yanbu','jazan'];
+const BRANCH_FIX={'nakeel':'Nakheel','hail':'Hail'};
+const REASON_FIX={'not the onwer':'Not the owner','has appiotment':'Has appointment','total lost':'Total loss','vehicle sold':'Sold vehicle','service done in pac':'Service done in PAC','service done pac':'Service done in PAC','service done in pe':'Service done in PE','service done pe':'Service done in PE','service done in ps':'Service done in PS','service done ps':'Service done in PS','far branch':'Far branch','low milage':'Low mileage'};
+const STATUS_ORDER=['Answered','No Answer','Closed','Wrong Number','Call Back','Not Called'];
+const STATUS_COLORS={'Answered':'#2b9de8','No Answer':'#d08a00','Closed':'#8a9ab5','Wrong Number':'#4a5a72','Call Back':'#7c5cc4','Not Called':'#dce3ed'};
+
+const clean=v=>(v==null?'':String(v)).replace(/ /g,' ').trim();
+const cap=v=>{ const t=clean(v).replace(/\s+/g,' '); if(!t) return ''; return t.charAt(0).toUpperCase()+t.slice(1); };
+const titleCase=v=>clean(v).replace(/\s+/g,' ').toLowerCase().replace(/(^|\s)\S/g,c=>c.toUpperCase());
+function normStatus(s){
+  const v=clean(s).toLowerCase();
+  if(!v) return 'Not Called';
+  if(v.startsWith('answer')||v==='responded'||v==='reached') return 'Answered';
+  if(v.startsWith('no ans')||v.includes('no answer')||v.includes('not answer')||v==='did not respond'||v==='unreachable') return 'No Answer';
+  if(v.startsWith('closed')) return 'Closed';
+  if(v.includes('wrong')) return 'Wrong Number';
+  if(v.includes('call back')||v.includes('callback')) return 'Call Back';
+  return cap(s);
+}
+function normReason(r){ const v=clean(r).replace(/\s+/g,' '); if(!v) return ''; return REASON_FIX[v.toLowerCase()]||cap(v); }
+function normBranch(b){ const v=clean(b).toLowerCase(); if(!v) return ''; return BRANCH_FIX[v]||titleCase(v); }
+const isBranch=v=>BRANCHES.includes(clean(v).toLowerCase());
+
+function parseDate(s){
+  const c=clean(s); if(!c) return null;
+  let m;
+  if(/^\d{5}(\.\d+)?$/.test(c)){ const d=new Date(Date.UTC(1899,11,30)+parseFloat(c)*864e5); return new Date(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()); }
+  if((m=c.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return new Date(+m[1],+m[2]-1,+m[3]);
+  if((m=c.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/))) return new Date(+m[3],+m[2]-1,+m[1]); // sheet uses DD/MM/YYYY
+  if((m=c.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/))){ const y=+m[3]<100?2000+(+m[3]):+m[3]; const d=new Date(`${m[2]} ${m[1]}, ${y}`); return isNaN(d)?null:d; }
+  const d=new Date(c.replace(/\s\d{1,2}:\d{2}.*$/,'')); return isNaN(d)?null:d;
+}
+
+// Read one tab: finds the header row and the columns by name, so column order can change freely.
+function parseSheet(rows, opts){
+  opts=opts||{};
+  if(!rows||!rows.length) return {records:[],signature:'',error:'empty'};
+  let h=-1;
+  for(let i=0;i<Math.min(8,rows.length);i++){ if(rows[i].some(c=>/^status$|call status/.test(clean(c).toLowerCase()))){h=i;break;} }
+  if(h<0) for(let i=0;i<Math.min(8,rows.length);i++){ if(rows[i].some(c=>clean(c).toLowerCase().includes('status'))){h=i;break;} }
+  if(h<0) return {records:[],signature:'',error:'no status column'};
+  const head=rows[h].map(c=>clean(c).toLowerCase());
+  const find=(...res)=>{ for(const re of res){ const i=head.findIndex(x=>re.test(x)); if(i>=0) return i; } return -1; };
+  const C={
+    code:find(/recall code/), vin:find(/^vin$|chassis/), brand:find(/^brand$|manufact|barnd/), model:find(/^model$/),
+    user:find(/^user$|agent/), status:find(/^status$/,/call status/,/status/), booked:find(/booked/),
+    reason:find(/not booked|if no|why/), branch:find(/booking branch/,/branch/),
+    date:find(/first status date/,/^date$/,/^created/,/date created/,/request date/,/sms.*date/,/last status date/)
+  };
+  const g=(r,k)=>C[k]>=0?clean(r[C[k]]):'';
+  const want=(opts.code||'').toLowerCase();
+  let seen=0, match=0; const out=[];
+  for(const r of rows.slice(h+1)){
+    const st=g(r,'status'), vin=g(r,'vin'), code=g(r,'code');
+    const any=r.some(c=>clean(c)); if(!any) continue;
+    if(!st && !vin && !code && !g(r,'user') && !g(r,'booked')) continue;
+    if(want && code){ seen++; if(code.toLowerCase()===want||code.toLowerCase().includes(want)) match++; else continue; }
+    let reason=normReason(g(r,'reason')), branch=g(r,'branch');
+    if(!branch && isBranch(reason)){ branch=reason; reason=''; }
+    const bk=g(r,'booked').toLowerCase();
+    out.push({ status:normStatus(st), booked:bk.startsWith('y')?'Yes':(bk.startsWith('n')?'No':''), reason, branch:normBranch(branch),
+      user:titleCase(g(r,'user')), brand:titleCase(g(r,'brand')), model:clean(g(r,'model')), date:parseDate(g(r,'date')) });
+  }
+  const signature=head.join('|')+'#'+(rows.length)+'#'+(rows[h+1]||[]).map(clean).join('|');
+  const hasRecallCol=C.code>=0;
+  if(want && seen>0 && match===0) return {records:[],signature,error:'returned another tab'};
+  if(opts.notRecall && hasRecallCol) return {records:[],signature,error:'returned a recall tab'};
+  return {records:out,signature};
+}
+
+function tally(arr,key,filter){ const m={}; arr.forEach(r=>{ if(filter&&!filter(r)) return; const v=r[key]; if(v) m[v]=(m[v]||0)+1; }); return Object.entries(m).sort((a,b)=>b[1]-a[1]); }
+function computeStats(recs){
+  const s={total:recs.length}; STATUS_ORDER.forEach(k=>s[k]=0);
+  recs.forEach(r=>{ s[r.status]=(s[r.status]||0)+1; });
+  s.answered=s['Answered']; s.noAnswer=s['No Answer']; s.closed=s['Closed']; s.wrong=s['Wrong Number']; s.callback=s['Call Back']; s.pending=s['Not Called'];
+  s.called=s.total-s.pending;
+  s.booked=recs.filter(r=>r.booked==='Yes').length; s.notBooked=recs.filter(r=>r.booked==='No').length;
+  s.ansRate=s.called?s.answered/s.called:0; s.bookRate=s.answered?s.booked/s.answered:0; s.coverage=s.total?s.called/s.total:0;
+  s.reasons=tally(recs,'reason',r=>r.booked==='No'); s.branches=tally(recs,'branch',r=>r.booked==='Yes');
+  s.models=tally(recs,'model'); s.brands=tally(recs,'brand'); s.statuses=STATUS_ORDER.filter(k=>s[k]>0).map(k=>[k,s[k]]);
+  const ag={}; recs.forEach(r=>{ if(!r.user) return; const a=ag[r.user]||(ag[r.user]={name:r.user,calls:0,answered:0,booked:0});
+    if(r.status!=='Not Called') a.calls++; if(r.status==='Answered') a.answered++; if(r.booked==='Yes') a.booked++; });
+  s.agents=Object.values(ag).sort((a,b)=>b.booked-a.booked||b.calls-a.calls);
+  return s;
+}
+const pct=x=>Math.round((x||0)*100)+'%';
+const fmt=n=>(n||0).toLocaleString('en-US');
+
+if(typeof module!=='undefined') module.exports={parseSheet,computeStats,ACTIVITIES,RECALLS};
+</script>
+
+<script>
+/* ================== PAGE ================== */
+let RAW={};            // id -> {records, error}
+let SELECTED_RECALL=null;
+let charts={};
+
+function fetchTab(t){
+  const q=t.gid?`gid=${encodeURIComponent(t.gid)}`:`sheet=${encodeURIComponent(t.sheet)}`;
+  return fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&${q}&_=${Date.now()}`,{cache:'no-store'})
+    .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+    .then(txt=>Papa.parse(txt,{header:false,skipEmptyLines:true}).data)
+    .catch(e=>({error:String(e.message||e)}));
+}
+
+async function loadAll(){
+  document.getElementById('loadingBar').style.display='flex';
+  const srcs=a=>a.sources||[{sheet:a.sheet,gid:a.gid}];
+  const jobs=[...ACTIVITIES.flatMap(a=>srcs(a).map((t,i)=>({id:a.key+'#'+i,t,opts:{notRecall:true}}))), ...RECALLS.map(r=>({id:'R:'+r.code,t:r,opts:{code:r.code}}))];
+  const res=await Promise.all(jobs.map(j=>fetchTab(j.t)));
+  RAW={};
+  jobs.forEach((j,i)=>{ const rows=res[i]; RAW[j.id]= rows.error?{records:[],error:rows.error}:parseSheet(rows,j.opts); });
+  // Google returns another tab's data when it can't find a name: drop non-recall tabs that came back identical to another tab
+  const sig={}; jobs.filter(j=>!j.id.startsWith('R:')).forEach(j=>{ const s=RAW[j.id].signature; if(s&&RAW[j.id].records.length) (sig[s]=sig[s]||[]).push(j.id); });
+  Object.values(sig).forEach(keys=>{ if(keys.length>1) keys.forEach(k=>{ RAW[k]={records:[],error:'same data as another tab'}; }); });
+  // combine the tabs of each activity
+  ACTIVITIES.forEach(a=>{ const parts=srcs(a).map((t,i)=>({sheet:t.sheet,count:RAW[a.key+'#'+i].records.length,records:RAW[a.key+'#'+i].records}));
+    RAW[a.key]={records:parts.flatMap(p=>p.records),parts:parts.map(p=>({sheet:p.sheet,count:p.count}))}; });
+  document.getElementById('loadingBar').style.display='none';
+  document.getElementById('lastUpdated').textContent='Last updated: '+new Date().toLocaleTimeString('en-GB');
+  render();
+}
+
+function getRange(){ const f=document.getElementById('dateFrom').value,t=document.getElementById('dateTo').value;
+  return {from:f?new Date(f+'T00:00:00'):null,to:t?new Date(t+'T23:59:59'):null,f,t}; }
+function inRange(recs){ const {from,to}=getRange(); return recs.filter(r=>{ if(!r.date) return true; if(from&&r.date<from) return false; if(to&&r.date>to) return false; return true; }); }
+function rangeLabel(){ const {f,t}=getRange(), d=s=>s.split('-').reverse().join('/'); if(!f&&!t) return 'All dates'; if(f&&t) return `${d(f)} – ${d(t)}`; return f?`From ${d(f)}`:`Until ${d(t)}`; }
+
+function model(){
+  const acts=ACTIVITIES.map(a=>{ const raw=RAW[a.key]||{records:[],parts:[]}; const recs=inRange(raw.records); return {...a,recs,stats:computeStats(recs),empty:!raw.records.length,parts:raw.parts||[]}; });
+  const recalls=RECALLS.map(r=>{ const raw=RAW['R:'+r.code]||{records:[]}; const recs=inRange(raw.records); const st=computeStats(recs);
+    return {...r,recs,stats:st,empty:!raw.records.length,error:raw.error,model:st.models.slice(0,2).map(m=>m[0]).join(', ')}; });
+  const recallRecs=recalls.flatMap(r=>r.recs), recallsAll=computeStats(recallRecs);
+  const all=computeStats(acts.flatMap(a=>a.recs).concat(recallRecs));
+  return {acts,recalls,recallsAll,all};
+}
+
+/* ---------- render helpers ---------- */
+function funnelBar(label,val,total,color){ const p=total?Math.round(val/total*100):0,w=total?Math.max(val/total*100,2):2;
+  return `<div class="funnel-row"><div class="funnel-row-label">${label}</div><div class="funnel-bar" style="background:${color};width:${w}%">${fmt(val)} <span class="funnel-pct">${p}%</span></div></div>`; }
+function funnelBlock(s,unit){ return funnelBar('Total '+unit,s.total,s.total,'#1e6fbf')+funnelBar('Answered',s.answered,s.total,'#2b9de8')+funnelBar('Booked',s.booked,s.total,'#0f8a52')+funnelBar('Not Booked',s.notBooked,s.total,'#d03535'); }
+function barList(items,color,n=8){ if(!items.length) return '<div style="font-size:11px;color:var(--text3)">No data</div>'; const max=items[0][1];
+  return items.slice(0,n).map(([l,v])=>`<div class="bar-item"><div class="bar-item-label" title="${l}">${l}</div><div class="bar-item-track"><div class="bar-item-fill" style="width:${Math.max(v/max*100,1)}%;background:${color}"></div></div><div class="bar-item-val">${v}</div></div>`).join(''); }
+function stackBar(s){ if(!s.total) return '<div class="stack"></div>'; const seg=(v,c)=>v>0?`<span style="width:${v/s.total*100}%;background:${c}" title="${v}"></span>`:'';
+  const other=s.closed+s.wrong+s.callback+Math.max(s.answered-s.booked-s.notBooked,0);
+  return `<div class="stack">${seg(s.booked,'#0f8a52')}${seg(s.notBooked,'#d03535')}${seg(s.noAnswer,'#d08a00')}${seg(other,'#8a9ab5')}${seg(s.pending,'#dce3ed')}</div>`; }
+const rateClass=r=>r>=0.7?'green':r>=0.5?'amber':'red';
+function agentTable(agents){ if(!agents.length) return '<div style="font-size:11px;color:var(--text3)">No data</div>';
+  return `<div style="overflow-x:auto"><table class="ag-table"><thead><tr><th>Agent</th><th>Calls</th><th>Answered</th><th>Booked</th><th>Booking %</th></tr></thead><tbody>${agents.map(a=>`<tr><td>${a.name}</td><td>${fmt(a.calls)}</td><td>${fmt(a.answered)}</td><td style="color:var(--green);font-weight:700">${fmt(a.booked)}</td><td><span class="pill ${rateClass(a.answered?a.booked/a.answered:0)}">${a.answered?pct(a.booked/a.answered):'—'}</span></td></tr>`).join('')}</tbody></table></div>`; }
+function drawChart(id,cfg){ if(charts[id]) charts[id].destroy(); const el=document.getElementById(id); if(el) charts[id]=new Chart(el,cfg); }
+
+/* ---------- main render ---------- */
+function render(){
+  const M=model();
+  const bad=[...M.acts.flatMap(a=>a.parts.filter(p=>!p.count).map(p=>p.sheet)),...M.recalls.filter(r=>r.empty).map(r=>r.sheet)];
+  const nt=document.getElementById('notice');
+  if(bad.length){ nt.style.display='block'; nt.innerHTML=`<b>${bad.length} tab${bad.length>1?'s':''} with no records loaded:</b> ${bad.join(', ')}. If one of them has data, put its gid in the list at the bottom of this file.`; } else nt.style.display='none';
+
+  // KPI cards: one per activity + recalls combined
+  const kcard=(label,s,unit,cls,extra='')=>`<div class="kpi ${cls}" ${extra}><div class="kpi-label">${label}</div><div class="kpi-value">${fmt(s.total)}</div>
+    <div class="kpi-sub">${fmt(s.answered)} answered (${pct(s.ansRate)})</div><div class="kpi-change pos">↑ ${fmt(s.booked)} booked ${pct(s.bookRate)}</div></div>`;
+  document.getElementById('kpiGrid').innerHTML=
+    M.acts.map(a=>a.empty?`<div class="kpi gold"><div class="kpi-label">${a.label}</div><div class="kpi-value">—</div><div class="kpi-sub">No data loaded</div></div>`:kcard(a.label,a.stats,a.unit,'')).join('')+
+    kcard(`Recalls (${M.recalls.filter(r=>!r.empty).length} campaigns)`,M.recallsAll,'VINs','green click',`onclick="document.getElementById('recalls').scrollIntoView({behavior:'smooth'})" title="Open recall details"`)+
+    `<div class="kpi green"><div class="kpi-label">All Activities</div><div class="kpi-value">${fmt(M.all.total)}</div><div class="kpi-sub">${fmt(M.all.answered)} answered (${pct(M.all.ansRate)})</div><div class="kpi-change pos">↑ ${fmt(M.all.booked)} booked ${pct(M.all.bookRate)}</div></div>`;
+
+  // Funnel cards
+  const fcard=(title,sub,s,unit,cls='',btn='')=>`<div class="card ${cls}"><div class="card-title"><span>${title}</span>${btn}</div><div class="card-sub">${sub}</div>${funnelBlock(s,unit)}
+    <div class="bar-section-title">Reasons not booked</div>${barList(s.reasons,'#2b9de8',6)}</div>`;
+  document.getElementById('funnels').innerHTML=
+    M.acts.filter(a=>!a.empty).map(a=>fcard(a.label, a.parts.length>1 ? a.parts.map(p=>`${p.sheet}: ${fmt(p.count)}`).join(' · ') : `${a.unit.slice(0,-1)} → Booked journey`, a.stats,a.unit)).join('')+
+    fcard('Recalls — All Combined',`${fmt(M.recallsAll.total)} VINs across ${M.recalls.filter(r=>!r.empty).length} recalls`,M.recallsAll,'VINs','recall-card',
+      `<button class="link-btn" onclick="document.getElementById('recalls').scrollIntoView({behavior:'smooth'})">Each recall ▸</button>`);
+
+  // Recalls area
+  renderRecalls(M);
+
+  // bookings across activities
+  const A=M.all;
+  document.getElementById('allRate').textContent=pct(A.bookRate);
+  document.getElementById('allBooked').innerHTML=`${fmt(A.booked)} <span class="pill green">${pct(A.bookRate)}</span>`;
+  document.getElementById('allNotBooked').innerHTML=`${fmt(A.notBooked)} <span class="pill red">${A.answered?pct(A.notBooked/A.answered):'0%'}</span>`;
+  document.getElementById('allNoAns').innerHTML=`${fmt(A.noAnswer)} <span class="pill amber">${A.called?pct(A.noAnswer/A.called):'0%'}</span>`;
+  drawChart('allDonut',{type:'doughnut',data:{labels:['Booked','Not Booked'],datasets:[{data:[A.booked,A.notBooked],backgroundColor:['#0f8a52','#d03535'],borderWidth:2,borderColor:'#fff'}]},options:{cutout:'68%',plugins:{legend:{display:false}},maintainAspectRatio:false}});
+  const per=M.acts.filter(a=>!a.empty).map(a=>[a.label,a.stats.booked]).concat([['Recalls',M.recallsAll.booked]]).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('bookedPerActivity').innerHTML=barList(per,'#0f8a52',10);
+  const rows=M.acts.filter(a=>!a.empty).map(a=>[a.label,a.stats]).concat([['Recalls',M.recallsAll]]);
+  drawChart('rateChart',{type:'bar',data:{labels:rows.map(r=>r[0]),datasets:[{label:'Booking %',data:rows.map(r=>Math.round(r[1].bookRate*100)),backgroundColor:rows.map(r=>r[0]==='Recalls'?'#1e6fbf':'#0f8a52'),borderRadius:6}]},
+    options:{maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.raw+'%'}}},scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%',color:'#8a9ab5'},grid:{color:'rgba(0,0,0,0.05)'}},x:{grid:{display:false},ticks:{color:'#4a5a72'}}}}});
+
+  document.getElementById('branchSub').textContent=`${fmt(A.booked)} bookings · ${A.branches.length} branches`;
+  document.getElementById('branches').innerHTML=barList(A.branches,'#1e6fbf',14);
+  document.getElementById('agents').innerHTML=agentTable(A.agents);
+}
+
+function renderRecalls(M){
+  const R=M.recallsAll, wr=M.recalls.filter(r=>!r.empty);
+  document.getElementById('recallSub').textContent=`${wr.length} recall campaigns · ${fmt(R.total)} VINs · ${fmt(R.booked)} booked (${pct(R.bookRate)} of answered) · click a recall to see its details`;
+  const rows=M.recalls.map(r=>{ const t=r.stats;
+    if(r.empty) return `<tr class="empty"><td>${r.code}</td><td colspan="10" style="text-align:left;font-style:italic">No data loaded</td></tr>`;
+    return `<tr class="${r.code===SELECTED_RECALL?'active':''}" onclick="pickRecall('${r.code}')"><td>${r.code}<div style="font-size:10px;color:var(--text3);font-weight:400">${r.model||''}</div></td>
+      <td>${fmt(t.total)}</td><td>${fmt(t.called)}</td><td>${fmt(t.answered)}</td><td>${pct(t.ansRate)}</td><td style="color:var(--green);font-weight:700">${fmt(t.booked)}</td>
+      <td><span class="pill ${rateClass(t.bookRate)}">${pct(t.bookRate)}</span></td><td>${fmt(t.notBooked)}</td><td>${fmt(t.noAnswer)}</td><td>${fmt(t.pending)}</td><td>${stackBar(t)}</td></tr>`; }).join('');
+  document.getElementById('recallTable').innerHTML=`<table class="rc-table"><thead><tr><th>Recall</th><th>Total</th><th>Called</th><th>Answered</th><th>Answer %</th><th>Booked</th><th>Booking %</th><th>Not Booked</th><th>No Answer</th><th>Not Called</th><th>Progress</th></tr></thead>
+    <tbody class="rows">${rows}</tbody><tbody><tr class="total"><td>ALL RECALLS</td><td>${fmt(R.total)}</td><td>${fmt(R.called)}</td><td>${fmt(R.answered)}</td><td>${pct(R.ansRate)}</td><td>${fmt(R.booked)}</td><td>${pct(R.bookRate)}</td><td>${fmt(R.notBooked)}</td><td>${fmt(R.noAnswer)}</td><td>${fmt(R.pending)}</td><td>${stackBar(R)}</td></tr></tbody></table>`;
+
+  document.getElementById('recallTabs').innerHTML=`<button class="tab ${!SELECTED_RECALL?'active':''}" onclick="pickRecall(null)">All Recalls</button>`+
+    M.recalls.map(r=>`<button class="tab ${r.code===SELECTED_RECALL?'active':''} ${r.empty?'empty':''}" ${r.empty?'disabled title="No data loaded"':''} onclick="pickRecall('${r.code}')">${r.code}</button>`).join('');
+
+  const cur=SELECTED_RECALL?M.recalls.find(r=>r.code===SELECTED_RECALL):null;
+  const s=cur?cur.stats:R;
+  const title=cur?`Recall ${cur.code}`:'All Recalls';
+  const sub=cur?`${cur.sheet}${cur.model?' · '+cur.model:''}`:`${wr.length} campaigns combined`;
+  document.getElementById('recallDetail').innerHTML=`
+    <div class="detail-head"><div><div class="detail-code">${title}</div><div class="detail-sub">${sub}</div></div>
+      <span class="pill ${rateClass(s.bookRate)}" style="font-size:12px;padding:4px 10px">${pct(s.bookRate)} booking rate</span></div>
+    <div class="mini-kpis">
+      <div><b>${fmt(s.total)}</b><small>Total VINs</small></div><div><b>${fmt(s.called)}</b><small>Called (${pct(s.coverage)})</small></div>
+      <div><b>${fmt(s.answered)}</b><small>Answered (${pct(s.ansRate)})</small></div><div><b style="color:var(--green)">${fmt(s.booked)}</b><small>Booked</small></div>
+      <div><b style="color:var(--red)">${fmt(s.notBooked)}</b><small>Not booked</small></div><div><b style="color:var(--amber)">${fmt(s.noAnswer)}</b><small>No answer</small></div>
+      <div><b>${fmt(s.closed+s.wrong)}</b><small>Closed / wrong no.</small></div><div><b>${fmt(s.pending)}</b><small>Not called yet</small></div>
+    </div>
+    <div class="grid-3">
+      <div class="card"><div class="card-title">Call → Booked Journey</div><div class="card-sub">${fmt(s.total)} VINs</div>${funnelBar('Total VINs',s.total,s.total,'#1e6fbf')+funnelBar('Called',s.called,s.total,'#4a7fc1')+funnelBar('Answered',s.answered,s.total,'#2b9de8')+funnelBar('Booked',s.booked,s.total,'#0f8a52')+funnelBar('Not Booked',s.notBooked,s.total,'#d03535')}</div>
+      <div class="card"><div class="card-title">Why Not Booked?</div><div class="card-sub">${fmt(s.notBooked)} answered customers didn't book</div>${barList(s.reasons,'#d03535',10)}
+        <div class="bar-section-title">Call status</div>${barList(s.statuses,'#2b9de8',6)}</div>
+      <div class="card"><div class="card-title">Bookings by Branch</div><div class="card-sub">${fmt(s.booked)} bookings</div>${barList(s.branches,'#1e6fbf',10)}
+        <div class="bar-section-title">Agents</div>${agentTable(s.agents)}</div>
+    </div>`;
+}
+function pickRecall(code){ SELECTED_RECALL=code; render(); document.getElementById('recallTabs').scrollIntoView({behavior:'smooth',block:'start'}); }
+
+
+loadAll();
+setInterval(loadAll,5*60*1000); // auto-refresh every 5 minutes
+</script>
+</body>
+</html>
